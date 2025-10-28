@@ -1,0 +1,10 @@
+id: test_agent_json
+name: Test Agent JSON
+description: Agent for JSON testing
+provider: venice
+model: default
+memory: ""
+prompt_template: Hello {{name}}!
+parameters:
+    name: World
+logging: true

@@ -1,0 +1,10 @@
+id: scheduler_agent
+name: Scheduler Agent
+description: Handles scheduling, reminders, and calendar operations.
+provider: venice
+model: scheduler-model
+memory: session_scheduler
+prompt_template: "Schedule task: {{task}} at {{time}}"
+parameters:
+  timezone: UTC
+logging: true
