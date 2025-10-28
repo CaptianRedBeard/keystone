@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -34,5 +35,37 @@ func TestUsageTracker(t *testing.T) {
 	list := tracker.List()
 	if len(list) != 2 {
 		t.Errorf("expected 2 entries in list, got %d", len(list))
+	}
+}
+
+func TestGenerateIDUniqueness(t *testing.T) {
+	id1 := generateID()
+	time.Sleep(time.Microsecond) // ensure a tiny time gap
+	id2 := generateID()
+
+	if id1 == id2 {
+		t.Errorf("expected unique IDs, got same: %s", id1)
+	}
+}
+
+func TestConcurrentRecordSafety(t *testing.T) {
+	tracker := NewTracker()
+	wg := sync.WaitGroup{}
+	agents := []string{"a", "b", "c", "d"}
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			tracker.Record(agents[i%len(agents)], "test_provider", i)
+		}(i)
+	}
+	wg.Wait()
+
+	summary := tracker.Summary()
+	if summary.TotalRequests != 100 {
+		t.Errorf("expected 100 total requests, got %d", summary.TotalRequests)
+	}
+	if summary.TotalTokens == 0 {
+		t.Error("expected non-zero total tokens after concurrent writes")
 	}
 }

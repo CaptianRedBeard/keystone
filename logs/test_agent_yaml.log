@@ -1,0 +1,21 @@
+[2025-10-27 18:31:04] Loaded agent: Test YAML Agent      (test_agent_yaml)
+[2025-10-27 18:31:04] Agent 'Test YAML Agent' registered (provider=venice, model=default)
+[2025-10-27 18:31:11] Loaded agent: Test YAML Agent      (test_agent_yaml)
+[2025-10-27 18:31:18] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:31:18] Agent 'Test YAML Agent v2' registered (provider=venice, model=custom-model)
+[2025-10-27 18:31:33] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:31:40] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:31:40] [LOG] Agent 'Test YAML Agent v2' input: Summarize this paragraph.
+[2025-10-27 18:31:40] [LOG] Agent 'Test YAML Agent v2' response: 🧠 Venice says (model=custom-model): "Summarize this paragraph." [mocked]
+[2025-10-27 18:56:10] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:56:10] [LOG] Agent 'Test YAML Agent v2' final config -> model: custom-model, template: , parameters: map[task:summarize text]
+[2025-10-27 18:56:10] [LOG] Agent 'Test YAML Agent v2' input: Summarize this paragraph.
+[2025-10-27 18:56:10] [LOG] Agent 'Test YAML Agent v2' response: 🧠 Venice says (model=custom-model): "Summarize this paragraph." [mocked]
+[2025-10-27 18:56:18] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:56:24] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:56:46] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:56:52] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:56:58] Loaded agent: Test YAML Agent v2   (test_agent_yaml)
+[2025-10-27 18:56:58] [LOG] Agent 'Test YAML Agent v2' final config -> model: custom-model, template: , parameters: map[task:summarize text]
+[2025-10-27 18:56:58] [LOG] Agent 'Test YAML Agent v2' input: Test logging output.
+[2025-10-27 18:56:58] [LOG] Agent 'Test YAML Agent v2' response: 🧠 Venice says (model=custom-model): "Test logging output." [mocked]

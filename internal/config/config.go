@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -29,6 +30,7 @@ type DefaultConfig struct {
 // Global in-memory config
 var Cfg Config
 
+// LoadConfig loads the configuration from disk and environment variables.
 func LoadConfig(cfgPath string) error {
 	v := viper.New()
 
@@ -46,13 +48,22 @@ func LoadConfig(cfgPath string) error {
 
 	// Environment variable support: KEYSTONE_DEFAULT_PROVIDER, etc.
 	v.SetEnvPrefix("KEYSTONE")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// ✅ Explicitly bind nested environment keys
+	_ = v.BindEnv("default.provider")
+	_ = v.BindEnv("default.model")
+	_ = v.BindEnv("logLevel")
+	_ = v.BindEnv("storage")
+
+	// Default values
 	v.SetDefault("logLevel", "info")
 	v.SetDefault("storage", filepath.Join(os.TempDir(), "keystone_usage.db"))
 	v.SetDefault("default.provider", "venice")
 	v.SetDefault("default.model", "default")
 
+	// Try reading from disk
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Println("⚠️ No config file found, using defaults only.")
 	}

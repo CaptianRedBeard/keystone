@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"keystone/internal/logger"
 )
 
 var (
@@ -21,10 +23,9 @@ var rootCmd = &cobra.Command{
 		if verbose {
 			fmt.Println("Verbose mode enabled")
 		}
+		logger.Init(verbose)
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Keystone operational!")
-	},
+	// No Run: root is just a container
 }
 
 func Execute() {
@@ -42,7 +43,6 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 }
 
-// GetConfigPath returns the --config flag value for main.go
 func GetConfigPath() string {
 	return cfgFile
 }

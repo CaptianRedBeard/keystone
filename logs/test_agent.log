@@ -1,0 +1,8 @@
+[2025-10-28 08:41:50] Agent 'Test Agent' registered (provider=venice, model=default)
+[2025-10-28 08:43:48] Agent 'Test Agent' registered (provider=venice, model=default)
+[2025-10-28 08:43:58] Loaded agent: Test Agent           (test_agent)
+[2025-10-28 08:44:07] Loaded agent: Test Agent           (test_agent)
+[2025-10-28 08:44:07] [LOG] Agent 'Test Agent' final config -> model: default, template: Hello World!, parameters: map[name:World]
+[2025-10-28 08:44:07] [LOG] Agent 'Test Agent' input: Hello World!
+How are you?
+[2025-10-28 08:44:07] [LOG] Agent 'Test Agent' response: 🧠 Venice says (model=default): "Hello World!\nHow are you?" [mocked]

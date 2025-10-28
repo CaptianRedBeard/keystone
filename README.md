@@ -5,44 +5,44 @@ It provides a consistent interface for agents, a CLI for users, and a shared fou
 
 ## Status
 
-Work in progress – currently at **Phase 1: Core Infrastructure**.  
+Currently at Phase 2: Agent Framework
 
-Completed in Phase 1:
-- CLI scaffold using Cobra
-- Configuration management (YAML + environment overrides)
-- Minimal Venice API provider
-- In-memory usage tracker
-- Prototype sample agent
-- Unit tests for core modules
+Completed:
+- Agent interface and manager
+- CLI for agent registration, listing, and execution
+- Configuration system with YAML + CLI merge support
+- Unified logging and usage tracking
+- Mock and real provider integration (Venice)
+- Unit tests for config, usage, and agent subsystems
 
 ## Features
 
-- Run and manage agents via CLI (`keystone agent run <agent>`)
-- View usage statistics (`keystone usage`)
-- View and edit configuration (`keystone config view`)
-- Fully testable offline with mocked provider responses
+- Register, list, and run AI agents via CLI
+- Per-agent configuration for provider, model, and parameters
+- Configurable provider backend (Venice and future integrations)
+- Usage tracking with token accounting
+- Unified file + console logging
+- Extensible architecture ready for multi-agent orchestration
 
 ## Project Structure (Phase 1)
 
 cmd/
-agent.go # CLI agent commands
-config.go # CLI config commands
-usage.go # CLI usage commands
-root.go # Root Cobra command
+    agent.go       # Agent CLI commands
+    config.go      # Config CLI commands
+    usage.go       # Usage CLI commands
+    root.go        # Root Cobra command
 
 internal/
-agents/
-sample_agent.go # Prototype agent
-agent.go # Agent struct and manager
-config/
-config.go # Config loader, saver, printer
+    agent/         # Agent interfaces, registry, and manager
+    config/        # Config loader, saver, and merger
+    logger/        # Centralized logging utilities
+    usage/         # In-memory usage tracker
+
 providers/
-provider.go # AIProvider interface
-venice/
-venice.go # VeniceProvider implementation
-usage/
-usage.go # In-memory usage tracker
-main.go # Entry point
+    provider.go    # Provider interface
+    venice/        # Venice provider implementation (mock + real)
+
+main.go            # Application entry point
 
 ## Getting Started
 
@@ -59,6 +59,12 @@ cd keystone
 go run . --help
 keystone agent list
 keystone agent run sample_agent "Hello world"
+```
+
+4. (Optional) View config and usage:
+```bash
+keystone config view
+keystone usage
 ```
 
 ## License

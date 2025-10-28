@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,5 +75,52 @@ func TestEnvOverrides(t *testing.T) {
 
 	if Cfg.Default.Provider != "env_provider" {
 		t.Errorf("expected provider from env 'env_provider', got '%s'", Cfg.Default.Provider)
+	}
+}
+
+func TestPrintConfigSecrets(t *testing.T) {
+	Cfg.Providers = map[string]ProviderConfig{
+		"venice": {APIKey: "SECRET123", BaseURL: "https://api.venice.com", Model: "default"},
+	}
+	Cfg.Default.Provider = "venice"
+	Cfg.Default.Model = "default"
+	Cfg.LogLevel = "info"
+	Cfg.Storage = "/tmp/db.sqlite"
+
+	// Capture stdout
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+
+	PrintConfig(false)
+
+	// Close writer and read output
+	w.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	os.Stdout = old
+
+	output := buf.String()
+	if output == "" {
+		t.Error("PrintConfig produced no output")
+	}
+	if bytes.Contains([]byte(output), []byte("SECRET123")) {
+		t.Error("PrintConfig revealed secret API key when showSecrets=false")
+	}
+
+	// Now test with secrets
+	r2, w2, _ := os.Pipe()
+	os.Stdout = w2
+
+	PrintConfig(true)
+
+	w2.Close()
+	var buf2 bytes.Buffer
+	buf2.ReadFrom(r2)
+	os.Stdout = old
+
+	output2 := buf2.String()
+	if !bytes.Contains([]byte(output2), []byte("SECRET123")) {
+		t.Error("PrintConfig did not reveal secret API key when showSecrets=true")
 	}
 }
