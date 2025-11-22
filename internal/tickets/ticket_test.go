@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// setupStore creates a temporary ticket store for tests and returns a cleanup func.
 func setupStore(t *testing.T) (*Store, func()) {
 	t.Helper()
 	tmpDir := filepath.Join(os.TempDir(), "keystone_tickets_test")
@@ -19,6 +20,7 @@ func setupStore(t *testing.T) (*Store, func()) {
 	return store, cleanup
 }
 
+// TestTicketLifecycle contains core ticket persistence and utility tests.
 func TestTicketLifecycle(t *testing.T) {
 	store, cleanup := setupStore(t)
 	defer cleanup()
@@ -131,6 +133,76 @@ func TestTicketLifecycle(t *testing.T) {
 		id := NewID("part1", "part2")
 		if !strings.Contains(id, "part1") || !strings.Contains(id, "part2") {
 			t.Errorf("expected NewID to contain parts, got %s", id)
+		}
+	})
+}
+
+// TestTicketHandoff contains Phase 4 tests for handoff behavior (step/hops, TTL, hooks).
+func TestTicketHandoff(t *testing.T) {
+	t.Run("Basic", func(t *testing.T) {
+		ticket := NewTicket("t1", "user1", nil)
+		initialStep := ticket.Step
+		initialHops := ticket.Hops
+
+		err := ticket.Handoff("agent1")
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		if ticket.Step != initialStep+1 {
+			t.Errorf("expected Step %d, got %d", initialStep+1, ticket.Step)
+		}
+		if ticket.Hops != initialHops+1 {
+			t.Errorf("expected Hops %d, got %d", initialHops+1, ticket.Hops)
+		}
+
+		// Check context initialized for agent
+		if _, ok := ticket.Context["agent1"]; !ok {
+			t.Error("expected agent1 context to be initialized")
+		}
+	})
+
+	t.Run("MaxHops", func(t *testing.T) {
+		ticket := NewTicket("t2", "user1", nil)
+		ticket.Hops = ticket.MaxHops
+
+		err := ticket.Handoff("agent1")
+		if err == nil {
+			t.Fatal("expected error for exceeding max hops")
+		}
+	})
+
+	t.Run("Expired", func(t *testing.T) {
+		ticket := NewTicket("t3", "user1", nil)
+		ticket.ExpiresAt = time.Now().Add(-time.Minute)
+
+		err := ticket.Handoff("agent1")
+		if err == nil {
+			t.Fatal("expected error for expired ticket")
+		}
+	})
+
+	t.Run("Hook", func(t *testing.T) {
+		ticket := NewTicket("t4", "user1", nil)
+
+		called := false
+		OnHandoffHook = func(tk *Ticket, agentID string) {
+			called = true
+			if tk.ID != ticket.ID {
+				t.Errorf("expected ticket ID %s, got %s", ticket.ID, tk.ID)
+			}
+			if agentID != "agentX" {
+				t.Errorf("expected agentID 'agentX', got %s", agentID)
+			}
+		}
+		defer func() { OnHandoffHook = nil }() // reset after test
+
+		err := ticket.Handoff("agentX")
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if !called {
+			t.Error("expected OnHandoffHook to be called")
 		}
 	})
 }

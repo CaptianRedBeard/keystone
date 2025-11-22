@@ -511,55 +511,101 @@ func (v *VeniceProvider) UsageInfo() (providers.Usage, error) {
 // Default ticket storage path, can be overridden with KEYSTONE_TICKET_DIR
 var TicketDir = filepath.Join(os.Getenv("HOME"), ".keystone", "tickets")
 
-// Ticket represents a unit of work tracked across agents
+// Ticket represents a unit of work tracked across agents.
 type Ticket struct {
 
-// NewTicket constructs a new ticket with optional context
+// OnHandoffHook is an optional function to receive handoff events (Phase 5+ GUI/monitoring).
+var OnHandoffHook func(t *Ticket, nextAgentID string)
+
+// NewTicket constructs a new Ticket with optional context.
 func NewTicket(id, userID string, ctx interface{}) *Ticket {
 
-// NewID generates a unique ticket ID
+// NewID generates a unique ticket ID using optional string parts and current timestamp.
 func NewID(parts ...string) string {
 
-// Validate returns an error if the ticket is expired or exceeded hops
+// Validate checks if the ticket is expired or exceeded max hops.
 func (t *Ticket) Validate() error {
 
-// IsExpired returns true if the ticket has expired
+// IsExpired returns true if the ticket has expired.
 func (t *Ticket) IsExpired() bool {
 
-// IncrementStep increments step and hops
+// GetNamespaced retrieves a namespaced value for a specific agent.
+func (t *Ticket) GetNamespaced(agentID, key string) (string, bool) {
+
+// SetNamespaced sets a namespaced value for a specific agent.
+func (t *Ticket) SetNamespaced(agentID, key, value string) {
+
+// GetAllNamespaced returns all key-value pairs for a specific agent.
+func (t *Ticket) GetAllNamespaced(agentID string) map[string]string {
+
+// IncrementStep increments the ticket's step and hops, optionally logging.
 func (t *Ticket) IncrementStep(verbose bool) {
 
-// Serialize returns a snapshot of the ticket fields
+// Handoff transfers the ticket to the next agent.
+// It validates TTL/MaxHops, increments step and hops, and ensures
+// the next agent has an initialized context namespace.
+// Returns an error if the ticket cannot be handed off.
+func (t *Ticket) Handoff(nextAgentID string) error {
+
+// Serialize returns a snapshot of ticket fields.
 func (t *Ticket) Serialize() map[string]interface{} {
 
-// SerializeContext returns a copy of the context
+// SerializeContext returns a copy of the ticket's context.
 func (t *Ticket) SerializeContext() map[string]interface{} {
 
-// Store handles file-based persistence of tickets
+// Store handles file-based persistence of tickets.
 type Store struct {
 
-// Save persists a ticket to disk
+// NewStore creates a new ticket store at the given directory.
+func NewStore(dir string) *Store {
+
+// Save persists a ticket to disk.
 func (s *Store) Save(t *Ticket) error {
 
-// Load retrieves a ticket by user and ID
+// Load retrieves a ticket by user ID and ticket ID.
 func (s *Store) Load(userID, ticketID string) (*Ticket, error) {
 
-// List returns all tickets for a user or "all"
+// List returns all tickets for a user or all users if "all" is passed.
 func (s *Store) List(userID string) ([]*Ticket, error) {
 
-// Delete removes a ticket
+// Delete removes a ticket from storage.
 func (s *Store) Delete(userID, ticketID string) error {
 
-// Purge deletes all tickets for a user
+// Purge deletes all tickets for a given user.
 func (s *Store) Purge(userID string) error {
 
-// Cleanup removes expired or over-hopped tickets for a user
+// Cleanup removes expired or over-hopped tickets for a user, returning count of removed tickets.
 func (s *Store) Cleanup(userID string) (int, error) {
+
+```
+
+## internal/tickets/ticket_handoff_test.go
+```go
+// TestTicketHandoffBasic tests that Handoff increments Step and Hops
+func TestTicketHandoffBasic(t *testing.T) {
+
+// TestTicketHandoffMaxHops ensures handoff fails when MaxHops exceeded
+func TestTicketHandoffMaxHops(t *testing.T) {
+
+// TestTicketHandoffExpired ensures handoff fails for expired tickets
+func TestTicketHandoffExpired(t *testing.T) {
+
+// TestTicketHandoffHook tests OnHandoffHook is called
+func TestTicketHandoffHook(t *testing.T) {
 
 ```
 
 ## internal/tickets/ticket_test.go
 ```go
+// setupStore creates a temporary ticket store for tests and returns a cleanup func.
+func setupStore(t *testing.T) (*Store, func()) {
+
+// TestTicketLifecycle contains core ticket persistence and utility tests.
+func TestTicketLifecycle(t *testing.T) {
+
+// TestTicketHandoff contains Phase 4 tests for handoff behavior (step/hops, TTL, hooks).
+func TestTicketHandoff(t *testing.T) {
+
 ```
 
 ## internal/usage/usage_test.go
