@@ -1,79 +1,85 @@
 package logger
 
 import (
-	"io"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// helper to read recent log file contents
-func readLogFile(agentID string) (string, error) {
-	data, err := os.ReadFile(filepath.Join("logs", agentID+".log"))
+func TestLoggerWritesToFile(t *testing.T) {
+	tmp := filepath.Join(os.TempDir(), "keystone_test.log")
+	defer os.Remove(tmp)
+
+	if err := Init(tmp, false); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	defer Close()
+
+	Info("hello world", false)
+
+	data, err := os.ReadFile(tmp)
 	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func TestInitAndGet(t *testing.T) {
-	Init(false)
-
-	agentID := "test_agent"
-	logger := Get(agentID)
-	if logger == nil {
-		t.Fatal("expected non-nil logger")
+		t.Fatalf("failed to read logfile: %v", err)
 	}
 
-	// Confirm log file is created
-	logPath := filepath.Join("logs", agentID+".log")
-	if _, err := os.Stat(logPath); err != nil {
-		t.Fatalf("expected log file %s to exist: %v", logPath, err)
+	log := string(data)
+	if !strings.Contains(log, "hello world") {
+		t.Fatalf("log entry missing message: %s", log)
+	}
+	if !strings.Contains(log, "✅") {
+		t.Fatalf("log entry missing info symbol: %s", log)
 	}
 }
 
-func TestLogWritesToFile(t *testing.T) {
-	Init(false)
+func TestVerboseWritesToProvidedWriter(t *testing.T) {
+	var buf bytes.Buffer
+	tmp := filepath.Join(os.TempDir(), "keystone_verbose.log")
+	defer os.Remove(tmp)
 
-	agentID := "file_test_agent"
-	Log(agentID, "hello file logger")
-
-	content, err := readLogFile(agentID)
-	if err != nil {
-		t.Fatalf("failed to read log file: %v", err)
+	if err := InitWithWriter(tmp, true, &buf); err != nil {
+		t.Fatalf("InitWithWriter failed: %v", err)
 	}
-	if !strings.Contains(content, "hello file logger") {
-		t.Errorf("expected log content to contain message, got: %s", content)
+	defer Close()
+
+	Warn("something happened", false)
+
+	output := buf.String()
+	if !strings.Contains(output, "something happened") {
+		t.Fatalf("expected verbose output, got: %s", output)
 	}
-}
-
-func TestLogVerboseOutputsToConsole(t *testing.T) {
-	Init(true)
-
-	// Capture stdout
-	orig := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	Log("verbose_agent", "this should appear in console")
-
-	w.Close()
-	os.Stdout = orig
-	out, _ := io.ReadAll(r)
-
-	if !strings.Contains(string(out), "this should appear in console") {
-		t.Errorf("expected console output when verbose, got: %s", string(out))
+	if !strings.Contains(output, "⚠️") {
+		t.Fatalf("expected warning symbol, got: %s", output)
 	}
 }
 
-func TestLoggerReuse(t *testing.T) {
-	Init(false)
+func TestErrorSymbol(t *testing.T) {
+	tmp := filepath.Join(os.TempDir(), "keystone_error.log")
+	defer os.Remove(tmp)
 
-	a1 := Get("reuse_agent")
-	a2 := Get("reuse_agent")
-
-	if a1 != a2 {
-		t.Error("expected same logger instance for same agentID")
+	if err := Init(tmp, false); err != nil {
+		t.Fatalf("Init failed: %v", err)
 	}
+	defer Close()
+
+	Error("boom", false)
+
+	data, _ := os.ReadFile(tmp)
+	if !strings.Contains(string(data), "❌") {
+		t.Fatal("missing error symbol in output")
+	}
+}
+
+func TestCloseDoesNotPanic(t *testing.T) {
+	tmp := filepath.Join(os.TempDir(), "keystone_close.log")
+	defer os.Remove(tmp)
+
+	if err := Init(tmp, false); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+
+	// Should not panic even if called twice
+	Close()
+	Close()
 }

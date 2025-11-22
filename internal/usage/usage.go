@@ -5,32 +5,35 @@ import (
 	"time"
 )
 
+// Entry represents a single usage event.
 type Entry struct {
-	RequestID string    // optional unique ID per request
+	RequestID string    // unique ID per request
 	AgentID   string    // which agent made the request
 	Provider  string    // provider used (e.g., venice)
 	Tokens    int       // tokens used
 	Timestamp time.Time // time of the request
 }
 
-// Tracker keeps track of all usage events.
+// Tracker keeps track of usage events.
 type Tracker struct {
 	mu      sync.Mutex
 	entries []Entry
 }
 
+// Summary holds aggregated usage info.
 type Summary struct {
 	TotalRequests int
 	TotalTokens   int
 }
 
+// NewTracker creates a usage tracker instance.
 func NewTracker() *Tracker {
 	return &Tracker{
 		entries: make([]Entry, 0),
 	}
 }
 
-// Record adds a new usage entry.
+// Record adds a new usage entry to the tracker.
 func (t *Tracker) Record(agentID, provider string, tokens int) Entry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -47,29 +50,30 @@ func (t *Tracker) Record(agentID, provider string, tokens int) Entry {
 	return e
 }
 
-// Summary returns total requests and total tokens.
+// Summary aggregates usage data.
 func (t *Tracker) Summary() Summary {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	total := Summary{}
+	s := Summary{}
 	for _, e := range t.entries {
-		total.TotalRequests++
-		total.TotalTokens += e.Tokens
+		s.TotalRequests++
+		s.TotalTokens += e.Tokens
 	}
-	return total
+	return s
 }
 
-// List returns a copy of all entries
+// List returns a copy of all usage entries.
 func (t *Tracker) List() []Entry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	copied := make([]Entry, len(t.entries))
 	copy(copied, t.entries)
 	return copied
 }
 
-// simple unique ID generator (Phase 1)
+// generateID produces a simple timestamp-based unique ID.
 func generateID() string {
 	return time.Now().Format("20060102-150405.000000")
 }

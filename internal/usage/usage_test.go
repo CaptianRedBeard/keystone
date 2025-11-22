@@ -9,33 +9,34 @@ import (
 func TestUsageTracker(t *testing.T) {
 	tracker := NewTracker()
 
-	// Record first entry
-	e1 := tracker.Record("agent1", "venice", 10)
-	if e1.AgentID != "agent1" {
-		t.Errorf("expected AgentID 'agent1', got '%s'", e1.AgentID)
-	}
-	if e1.Tokens != 10 {
-		t.Errorf("expected Tokens 10, got %d", e1.Tokens)
-	}
-	if time.Since(e1.Timestamp) > time.Second {
-		t.Error("Timestamp seems incorrect")
-	}
+	t.Run("RecordEntry", func(t *testing.T) {
+		e := tracker.Record("agent1", "venice", 10)
+		if e.AgentID != "agent1" {
+			t.Errorf("expected AgentID 'agent1', got '%s'", e.AgentID)
+		}
+		if e.Tokens != 10 {
+			t.Errorf("expected Tokens 10, got %d", e.Tokens)
+		}
+		if time.Since(e.Timestamp) > time.Second {
+			t.Error("Timestamp seems incorrect")
+		}
+	})
 
-	// Record another entry
-	tracker.Record("agent1", "venice", 5)
-	summary := tracker.Summary()
-	if summary.TotalTokens != 15 {
-		t.Errorf("expected total tokens 15, got %d", summary.TotalTokens)
-	}
-	if summary.TotalRequests != 2 {
-		t.Errorf("expected total requests 2, got %d", summary.TotalRequests)
-	}
+	t.Run("SummaryAndList", func(t *testing.T) {
+		tracker.Record("agent1", "venice", 5)
+		summary := tracker.Summary()
+		if summary.TotalRequests != 2 {
+			t.Errorf("expected total requests 2, got %d", summary.TotalRequests)
+		}
+		if summary.TotalTokens != 15 {
+			t.Errorf("expected total tokens 15, got %d", summary.TotalTokens)
+		}
 
-	// Test List
-	list := tracker.List()
-	if len(list) != 2 {
-		t.Errorf("expected 2 entries in list, got %d", len(list))
-	}
+		list := tracker.List()
+		if len(list) != 2 {
+			t.Errorf("expected 2 entries in list, got %d", len(list))
+		}
+	})
 }
 
 func TestGenerateIDUniqueness(t *testing.T) {
@@ -52,6 +53,7 @@ func TestConcurrentRecordSafety(t *testing.T) {
 	tracker := NewTracker()
 	wg := sync.WaitGroup{}
 	agents := []string{"a", "b", "c", "d"}
+
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func(i int) {

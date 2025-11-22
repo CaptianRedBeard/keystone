@@ -1,0 +1,10 @@
+id: prefix_agent
+name: Prefix Agent
+description: Prepends a fixed string to the input.
+provider: mock
+model: prefix-model
+memory: session_prefix
+prompt_template: "PREFIX: {{input}}"
+parameters:
+  prefix: "PREFIX: "
+logging: true

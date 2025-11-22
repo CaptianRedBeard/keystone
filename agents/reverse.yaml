@@ -1,0 +1,9 @@
+id: reverse_agent
+name: Reverse Agent
+description: Reverses the input string for testing.
+provider: mock
+model: reverse-model
+memory: session_reverse
+prompt_template: "{{input | reverse}}"
+parameters: {}
+logging: true

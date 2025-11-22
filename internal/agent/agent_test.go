@@ -1,126 +1,37 @@
+// Package agent contains core agent tests.
 package agent
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"keystone/internal/providers"
-
-	"gopkg.in/yaml.v3"
+	"github.com/stretchr/testify/require"
 )
 
-// mockProvider implements the Provider interface for testing
-type mockProvider struct{}
-
-func (m *mockProvider) GenerateResponse(ctx context.Context, input, model string) (string, error) {
-	return "mock response: " + input, nil
+// TestAgent_Handle verifies agent handles input and returns a response.
+func TestAgent_Handle(t *testing.T) {
+	agent := BuildTestAgent("default_agent", "Default Agent")
+	resp := HandleInput(t, agent, "hello world")
+	require.Equal(t, "mock response: hello world", resp)
 }
 
-func (m *mockProvider) UsageInfo() (providers.Usage, error) {
-	return providers.Usage{
-		Requests: 0,
-		Tokens:   0,
-	}, nil
+// TestAgent_Getters verifies all getters return expected values.
+func TestAgent_Getters(t *testing.T) {
+	a := BuildTestAgent("default_agent", "Default Agent")
+	require.Equal(t, "default_agent", a.ID())
+	require.Equal(t, "Default Agent", a.Name())
+	require.Equal(t, "memory-string", a.Memory())
+	require.Equal(t, "default_agent-model", a.DefaultModel())
+	require.True(t, a.LoggingEnabled())
+	require.Equal(t, map[string]string{}, a.Parameters())
+	require.Equal(t, "", a.PromptTemplate())
 }
 
-func TestAgentBase_Handle(t *testing.T) {
-	agent := NewAgent("a1", "Test Agent", "desc", &mockProvider{}, "default", "", WithLogging(true))
-	resp, err := agent.Handle(context.Background(), "hello")
-	if err != nil {
-		t.Fatalf("Handle failed: %v", err)
-	}
-	expected := "mock response: hello"
-	if resp != expected {
-		t.Errorf("Expected '%s', got '%s'", expected, resp)
-	}
-}
-
-func TestAgentManager_RegisterGetList(t *testing.T) {
-	mgr := NewManager()
-	agent := NewAgent("a1", "Test Agent", "desc", &mockProvider{}, "default", "")
-
-	if err := mgr.Register(agent); err != nil {
-		t.Fatalf("Register failed: %v", err)
-	}
-
-	if _, err := mgr.Get("a1"); err != nil {
-		t.Fatalf("Get failed: %v", err)
-	}
-
-	agents := mgr.List()
-	if len(agents) != 1 {
-		t.Errorf("Expected 1 agent, got %d", len(agents))
-	}
-
-	// Duplicate registration should fail
-	if err := mgr.Register(agent); err == nil {
-		t.Errorf("Expected error on duplicate register")
-	}
-}
-
-func TestLifecycleManager_LoadUnloadReload(t *testing.T) {
-	// Create temporary directory for YAML config
-	tmpDir := t.TempDir()
-	cfgPath := filepath.Join(tmpDir, "a1.yaml")
-
-	cfg := AgentConfig{
-		ID:          "a1",
-		Name:        "Test Agent",
-		Description: "Lifecycle test agent",
-		Provider:    "venice",
-		Model:       "default",
-	}
-
-	data, _ := yaml.Marshal(&cfg)
-	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
-		t.Fatalf("Failed to write test YAML: %v", err)
-	}
-
-	lm := NewLifecycleManager(tmpDir)
-
-	// Load agent
-	if err := lm.LoadAgent("a1"); err != nil {
-		t.Fatalf("LoadAgent failed: %v", err)
-	}
-
-	// Reload agent
-	if err := lm.ReloadAgent("a1"); err != nil {
-		t.Fatalf("ReloadAgent failed: %v", err)
-	}
-
-	// Unload agent
-	if err := lm.UnloadAgent("a1"); err != nil {
-		t.Fatalf("UnloadAgent failed: %v", err)
-	}
-
-	// Unload again should fail
-	if err := lm.UnloadAgent("a1"); err == nil {
-		t.Errorf("Expected error on unloading missing agent")
-	}
-}
-
-func TestAgentConfig_MergeValidate(t *testing.T) {
-	a := AgentConfig{ID: "a1", Name: "A1", Provider: "venice"}
-	b := AgentConfig{Name: "A1-updated", Parameters: map[string]string{"x": "1"}, Logging: true}
-
-	a.Merge(b)
-
-	if a.Name != "A1-updated" {
-		t.Errorf("Expected name 'A1-updated', got %s", a.Name)
-	}
-	if !a.Logging {
-		t.Errorf("Expected logging to be true")
-	}
-
-	if err := a.Validate(); err != nil {
-		t.Errorf("Validation failed: %v", err)
-	}
-
-	// Missing ID should fail validation
-	a.ID = ""
-	if err := a.Validate(); err == nil {
-		t.Errorf("Expected validation error for missing ID")
-	}
+// TestAgent_HandleWithNilProvider ensures agent returns error when provider is nil.
+func TestAgent_HandleWithNilProvider(t *testing.T) {
+	agent := NewAgent("no_provider", "No Provider Agent", "Agent with nil provider", nil, "no_provider-model", "mem")
+	resp, err := agent.Handle(context.Background(), "input", NewMockTicket())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no provider")
+	require.Empty(t, resp)
 }

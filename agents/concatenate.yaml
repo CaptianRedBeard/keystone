@@ -1,0 +1,10 @@
+id: concat_agent
+name: Concatenate Agent
+description: Appends input to ticket context for testing aggregation.
+provider: mock
+model: concat-model
+memory: session_concat
+prompt_template: "{{input}}"
+parameters:
+  concat_key: aggregated
+logging: true

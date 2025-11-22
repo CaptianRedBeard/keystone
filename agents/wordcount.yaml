@@ -1,0 +1,10 @@
+id: wordcount_agent
+name: Word Count Agent
+description: Counts words in the input text.
+provider: mock
+model: wordcount-model
+memory: session_wordcount
+prompt_template: "{{input}}"
+parameters:
+  result_key: word_count
+logging: true

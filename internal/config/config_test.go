@@ -1,126 +1,94 @@
-package config
+package config_test
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"keystone/internal/config"
 )
 
-func TestLoadDefaults(t *testing.T) {
-	cfgPath := filepath.Join(os.TempDir(), "nonexistent_config.yaml")
-	err := LoadConfig(cfgPath)
+func tempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "configtest")
 	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestSaveAndLoad(t *testing.T) {
+	dir := tempDir(t)
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg := &config.Config{
+		DBPath:    "foo.db",
+		AgentsDir: "./agents",
 	}
 
-	if Cfg.Default.Provider != "venice" {
-		t.Errorf("expected default provider 'venice', got '%s'", Cfg.Default.Provider)
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatal(err)
 	}
-	if Cfg.Default.Model != "default" {
-		t.Errorf("expected default model 'default', got '%s'", Cfg.Default.Model)
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if Cfg.LogLevel != "info" {
-		t.Errorf("expected logLevel 'info', got '%s'", Cfg.LogLevel)
+
+	if loaded.DBPath != "foo.db" {
+		t.Fatalf("expected DBPath foo.db, got %s", loaded.DBPath)
 	}
-	if Cfg.Storage == "" {
-		t.Error("expected Storage to have a default value")
+	if loaded.AgentsDir != "./agents" {
+		t.Fatalf("expected AgentsDir ./agents, got %s", loaded.AgentsDir)
 	}
 }
 
-func TestSaveAndReloadConfig(t *testing.T) {
-	// Modify in-memory config
-	Cfg.Default.Provider = "mock_provider"
-	Cfg.Default.Model = "mock_model"
-	Cfg.LogLevel = "debug"
+func TestLoadMissing(t *testing.T) {
+	dir := tempDir(t)
+	path := filepath.Join(dir, "missing.yaml")
 
-	tempPath := filepath.Join(os.TempDir(), "keystone_test_config.yaml")
-	defer os.Remove(tempPath)
-
-	// Save
-	if err := SaveConfig(tempPath); err != nil {
-		t.Fatalf("SaveConfig failed: %v", err)
-	}
-
-	// Reset in-memory config
-	Cfg.Default.Provider = ""
-	Cfg.Default.Model = ""
-	Cfg.LogLevel = ""
-
-	// Reload
-	if err := LoadConfig(tempPath); err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
-
-	if Cfg.Default.Provider != "mock_provider" {
-		t.Errorf("expected provider 'mock_provider', got '%s'", Cfg.Default.Provider)
-	}
-	if Cfg.Default.Model != "mock_model" {
-		t.Errorf("expected model 'mock_model', got '%s'", Cfg.Default.Model)
-	}
-	if Cfg.LogLevel != "debug" {
-		t.Errorf("expected logLevel 'debug', got '%s'", Cfg.LogLevel)
+	_, err := config.Load(path)
+	if err == nil || err != config.ErrNoConfig {
+		t.Fatalf("expected ErrNoConfig, got %v", err)
 	}
 }
 
-func TestEnvOverrides(t *testing.T) {
-	// Set environment variable
-	os.Setenv("KEYSTONE_DEFAULT_PROVIDER", "env_provider")
-	defer os.Unsetenv("KEYSTONE_DEFAULT_PROVIDER")
+func TestLoadInvalidYAML(t *testing.T) {
+	dir := tempDir(t)
+	path := filepath.Join(dir, "bad.yaml")
 
-	cfgPath := filepath.Join(os.TempDir(), "nonexistent_config.yaml")
-	if err := LoadConfig(cfgPath); err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
+	if err := os.WriteFile(path, []byte("{not valid"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
-	if Cfg.Default.Provider != "env_provider" {
-		t.Errorf("expected provider from env 'env_provider', got '%s'", Cfg.Default.Provider)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
 	}
 }
 
-func TestPrintConfigSecrets(t *testing.T) {
-	Cfg.Providers = map[string]ProviderConfig{
-		"venice": {APIKey: "SECRET123", BaseURL: "https://api.venice.com", Model: "default"},
+func TestSaveFail(t *testing.T) {
+	// Writing to a directory should fail
+	err := config.Save("/", &config.Config{})
+	if err == nil {
+		t.Fatal("expected error saving to invalid path")
 	}
-	Cfg.Default.Provider = "venice"
-	Cfg.Default.Model = "default"
-	Cfg.LogLevel = "info"
-	Cfg.Storage = "/tmp/db.sqlite"
+}
 
-	// Capture stdout
-	r, w, _ := os.Pipe()
-	old := os.Stdout
-	os.Stdout = w
-
-	PrintConfig(false)
-
-	// Close writer and read output
-	w.Close()
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	os.Stdout = old
-
-	output := buf.String()
-	if output == "" {
-		t.Error("PrintConfig produced no output")
+func TestDefaults(t *testing.T) {
+	cfg := config.New()
+	if cfg.AgentsDir != "./agents" {
+		t.Errorf("expected default AgentsDir './agents', got %s", cfg.AgentsDir)
 	}
-	if bytes.Contains([]byte(output), []byte("SECRET123")) {
-		t.Error("PrintConfig revealed secret API key when showSecrets=false")
-	}
+}
 
-	// Now test with secrets
-	r2, w2, _ := os.Pipe()
-	os.Stdout = w2
+func TestEnvOverride(t *testing.T) {
+	tmp := tempDir(t)
+	defer os.Unsetenv("KEYSTONE_AGENTS_DIR")
+	os.Setenv("KEYSTONE_AGENTS_DIR", tmp)
 
-	PrintConfig(true)
-
-	w2.Close()
-	var buf2 bytes.Buffer
-	buf2.ReadFrom(r2)
-	os.Stdout = old
-
-	output2 := buf2.String()
-	if !bytes.Contains([]byte(output2), []byte("SECRET123")) {
-		t.Error("PrintConfig did not reveal secret API key when showSecrets=true")
+	cfg := config.New()
+	if cfg.AgentsDir != tmp {
+		t.Errorf("expected AgentsDir '%s' from env, got %s", tmp, cfg.AgentsDir)
 	}
 }
