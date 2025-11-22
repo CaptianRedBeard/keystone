@@ -5,7 +5,7 @@ It provides a consistent interface for agents, a CLI for users, and a shared fou
 
 ## Status
 
-Currently at Phase 2: Agent Framework
+Currently at Phase 3: Workflow Continuity & Ticket System
 
 Completed:
 - Agent interface and manager
@@ -13,36 +13,51 @@ Completed:
 - Configuration system with YAML + CLI merge support
 - Unified logging and usage tracking
 - Mock and real provider integration (Venice)
-- Unit tests for config, usage, and agent subsystems
+- Ticket-based workflow system with per-ticket context, TTL, and hop limits
+- CLI commands for ticket creation, inspection, listing, monitoring, and cleanup
+- Agent interface updated to support ticket-aware handling
+- Workflow continuity tested via multi-step agent CLI runs
 
 ## Features
 
 - Register, list, and run AI agents via CLI
 - Per-agent configuration for provider, model, and parameters
 - Configurable provider backend (Venice and future integrations)
+- Ticket-based workflow system with namespaced context
+- CLI integration for ticket creation, inspection, and monitoring
+- Step incrementing and TTL enforcement for agent runs
 - Usage tracking with token accounting
 - Unified file + console logging
 - Extensible architecture ready for multi-agent orchestration
 
-## Project Structure (Phase 1)
+## Project Structure (Phase 3)
 
 cmd/
-    agent.go       # Agent CLI commands
-    config.go      # Config CLI commands
-    usage.go       # Usage CLI commands
-    root.go        # Root Cobra command
+    agent.go
+    agent_register.go
+    config.go
+    print.go
+    root.go
+    test_helpers.go
+    ticket.go
+    usage.go
+    workflow.go
 
 internal/
     agent/         # Agent interfaces, registry, and manager
     config/        # Config loader, saver, and merger
     logger/        # Centralized logging utilities
+    providers/     # Provider interfaces and Venice implementation
+    tickets/       # Ticket struct and JSON storage backend
     usage/         # In-memory usage tracker
+    workflow/      # Workflow engine and store
 
-providers/
-    provider.go    # Provider interface
-    venice/        # Venice provider implementation (mock + real)
-
-main.go            # Application entry point
+agents/           # Example agent YAML definitions
+configs/          # Configuration templates or sample files
+workflows/        # Sample workflow YAML files
+main.go           # Application entry point
+init_config.sh    # Initialize default configuration
+keystone          # Compiled CLI binary
 
 ## Getting Started
 

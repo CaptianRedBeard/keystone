@@ -1,0 +1,9 @@
+id: echo_agent
+name: Echo Agent
+description: Returns the input string as-is for testing purposes.
+provider: mock
+model: echo-model
+memory: session_echo
+prompt_template: "{{input}}"
+parameters: {}
+logging: true

@@ -1,0 +1,9 @@
+id: uppercase_agent
+name: Uppercase Agent
+description: Converts input text to uppercase.
+provider: mock
+model: uppercase-model
+memory: session_upper
+prompt_template: "{{input | upper}}"
+parameters: {}
+logging: true

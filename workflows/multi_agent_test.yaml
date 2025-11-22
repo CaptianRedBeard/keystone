@@ -1,0 +1,11 @@
+id: multi_agent_test
+description: A multi-agent workflow demonstrating sequential execution.
+steps:
+  - agent_id: default
+    input: "Write a short paragraph about cats."
+  - agent_id: lookup_agent
+    input: "Summarize the above paragraph."
+  - agent_id: prefix_agent
+    input: "Prefix the summary with 'Summary: '"
+  - agent_id: wordcount_agent
+    input: "Count the words in the prefixed summary."

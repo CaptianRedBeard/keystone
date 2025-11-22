@@ -1,0 +1,5 @@
+id: single_agent_test
+description: A simple workflow using only the default agent.
+steps:
+  - agent_id: default
+    input: "Say hello to the world."

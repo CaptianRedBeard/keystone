@@ -1,0 +1,10 @@
+id: lookup_agent
+name: Lookup Agent
+description: Performs quick reference lookups from external data sources.
+provider: venice
+model: lookup-model
+memory: transient_lookup
+prompt_template: "Lookup query: {{query}}"
+parameters:
+  max_results: "5"
+logging: false

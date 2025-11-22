@@ -1,3 +1,4 @@
+// Package agent provides base implementations and helpers for AI agents.
 package agent
 
 import (
@@ -13,136 +14,116 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AgentConfig defines the structure of agent YAML files.
-type AgentConfig struct {
-	ID             string            `yaml:"id"`
-	Name           string            `yaml:"name"`
-	Description    string            `yaml:"description"`
-	Provider       string            `yaml:"provider"`
-	Model          string            `yaml:"model"`
-	Memory         string            `yaml:"memory"`
-	PromptTemplate string            `yaml:"prompt_template,omitempty"`
-	Parameters     map[string]string `yaml:"parameters,omitempty"`
-	Logging        bool              `yaml:"logging,omitempty"`
+// BuildAgent constructs an Agent from an AgentConfig.
+func BuildAgent(cfg AgentConfig) Agent {
+	var provider providers.Provider
+	switch cfg.Provider {
+	case "venice":
+		provider = venice.New("MOCK_API_KEY", "")
+	default:
+		provider = venice.New("MOCK_API_KEY", "")
+	}
+
+	return NewAgent(
+		cfg.ID,
+		cfg.Name,
+		cfg.Description,
+		provider,
+		cfg.Model,
+		cfg.Memory,
+		WithPromptTemplate(cfg.PromptTemplate),
+		WithParameters(cfg.Parameters),
+		WithLogging(cfg.Logging),
+	)
 }
 
-// ProviderFactory defines a function that returns a Provider.
-type ProviderFactory func() providers.Provider
-
-// providerRegistry maps provider names to constructors.
-var providerRegistry = map[string]ProviderFactory{
-	"venice": func() providers.Provider {
-		return venice.New("MOCK_API_KEY", "")
-	},
-}
-
-// LoadAgentsFromConfig scans a directory and loads all YAML agents.
-// This keeps the old signature so cmd files continue to work.
+// LoadAgentsFromConfig scans a directory and loads all YAML agent configs into the manager.
 func LoadAgentsFromConfig(manager *AgentManager, configDir string) error {
-	return filepath.WalkDir(configDir, func(path string, d fs.DirEntry, err error) error {
+	var loadErrs []error
+
+	if _, err := os.Stat(configDir); err != nil {
+		if os.IsNotExist(err) {
+			logger.Warn(fmt.Sprintf("Agent config directory does not exist: %s", configDir), false)
+			return nil
+		}
+		return fmt.Errorf("failed to access agent config dir %s: %w", configDir, err)
+	}
+
+	err := filepath.WalkDir(configDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		if d.IsDir() || filepath.Ext(path) != ".yaml" {
 			return nil
 		}
 
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
-			return fmt.Errorf("error reading agent config %s: %v", path, readErr)
+			logger.Error(fmt.Sprintf("Error reading agent config %s: %v", path, readErr), false)
+			loadErrs = append(loadErrs, fmt.Errorf("error reading agent config %s: %w", path, readErr))
+			return nil
 		}
 
 		var cfg AgentConfig
 		if yamlErr := yaml.Unmarshal(data, &cfg); yamlErr != nil {
-			return fmt.Errorf("error parsing YAML for %s: %v", path, yamlErr)
-		}
-
-		// Skip duplicate IDs
-		if _, err := manager.Get(cfg.ID); err == nil {
-			fmt.Printf("⚠️ Skipping duplicate agent ID: %s\n", cfg.ID)
+			logger.Error(fmt.Sprintf("Error parsing YAML for %s: %v", path, yamlErr), false)
+			loadErrs = append(loadErrs, fmt.Errorf("error parsing YAML for %s: %w", path, yamlErr))
 			return nil
 		}
 
-		// Create provider
-		providerFactory, ok := providerRegistry[cfg.Provider]
-		if !ok {
-			return fmt.Errorf("unknown provider '%s' for agent %s", cfg.Provider, cfg.ID)
-		}
-		provider := providerFactory()
-
-		base := NewAgent(
-			cfg.ID,
-			cfg.Name,
-			cfg.Description,
-			provider,
-			cfg.Model,
-			cfg.Memory,
-			WithPromptTemplate(cfg.PromptTemplate),
-			WithParameters(cfg.Parameters),
-			WithLogging(cfg.Logging),
-		)
-
-		if err := manager.Register(base); err != nil {
-			return fmt.Errorf("failed to register agent %s: %v", cfg.ID, err)
+		if err := cfg.Validate(); err != nil {
+			logger.Error(fmt.Sprintf("Invalid agent config %s: %v", path, err), false)
+			loadErrs = append(loadErrs, fmt.Errorf("invalid agent config %s: %w", path, err))
+			return nil
 		}
 
-		logMsg := fmt.Sprintf("Loaded agent: %-20s (%s)", cfg.Name, cfg.ID)
-		logger.Log(cfg.ID, logMsg)
-		fmt.Println(logMsg)
+		if _, err := manager.Get(cfg.ID); err == nil {
+			logger.Warn(fmt.Sprintf("Skipping duplicate agent ID: %s", cfg.ID), false)
+			return nil
+		}
 
+		a := BuildAgent(cfg)
+		if err := manager.Register(a); err != nil {
+			logger.Error(fmt.Sprintf("Failed to register agent %s: %v", cfg.ID, err), false)
+			loadErrs = append(loadErrs, fmt.Errorf("failed to register agent %s: %w", cfg.ID, err))
+			return nil
+		}
+
+		logger.Info(fmt.Sprintf("Loaded agent: %-20s (%s)", cfg.Name, cfg.ID), false)
 		return nil
 	})
-}
 
-// Merge merges another AgentConfig (src) into this one, prioritizing non-empty fields from src.
-func (dst *AgentConfig) Merge(src AgentConfig) {
-	if src.ID != "" {
-		dst.ID = src.ID
+	if err != nil {
+		return fmt.Errorf("error walking agent config dir: %w", err)
 	}
-	if src.Name != "" {
-		dst.Name = src.Name
-	}
-	if src.Description != "" {
-		dst.Description = src.Description
-	}
-	if src.Provider != "" {
-		dst.Provider = src.Provider
-	}
-	if src.Model != "" {
-		dst.Model = src.Model
-	}
-	if src.Memory != "" {
-		dst.Memory = src.Memory
-	}
-	if src.PromptTemplate != "" {
-		dst.PromptTemplate = src.PromptTemplate
-	}
-	if src.Parameters != nil {
-		if dst.Parameters == nil {
-			dst.Parameters = make(map[string]string)
-		}
-		for k, v := range src.Parameters {
-			dst.Parameters[k] = v
-		}
-	}
-	if src.Logging {
-		dst.Logging = true
-	}
-}
-
-// Validate ensures required fields are set correctly.
-func (cfg *AgentConfig) Validate() error {
-	if cfg.ID == "" {
-		return fmt.Errorf("missing agent ID")
-	}
-	if cfg.Name == "" {
-		return fmt.Errorf("missing agent name")
-	}
-	if cfg.Provider == "" {
-		return fmt.Errorf("missing provider for agent %s", cfg.ID)
-	}
-	if cfg.Model == "" {
-		cfg.Model = "default"
+	if len(loadErrs) > 0 {
+		return fmt.Errorf("errors occurred while loading agents: %v", loadErrs)
 	}
 	return nil
+}
+
+// LoadDefaultAgent ensures a fallback dummy agent exists in the manager.
+func LoadDefaultAgent(manager *AgentManager) {
+	const dummyID = "dummy"
+	if _, err := manager.Get(dummyID); err == nil {
+		return // already exists
+	}
+
+	cfg := AgentConfig{
+		ID:             dummyID,
+		Name:           "Dummy Agent",
+		Description:    "A fallback agent for testing and defaults",
+		Provider:       "venice",
+		Model:          "default",
+		PromptTemplate: "{{input}}",
+		Parameters:     map[string]string{},
+	}
+	a := BuildAgent(cfg)
+	if err := manager.Register(a); err != nil {
+		logger.Warn(fmt.Sprintf("Failed to register default dummy agent: %v", err), false)
+		return
+	}
+
+	logger.Info("Loaded default dummy agent", false)
 }

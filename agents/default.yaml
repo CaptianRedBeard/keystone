@@ -1,0 +1,12 @@
+id: default_agent
+name: Default Agent
+description: Prototype agent using the Venice provider for testing.
+provider: mock
+model: default
+memory: session_sample
+prompt_template: "You are a helpful assistant. {{input}}" # Optional template
+parameters: 
+  temperature: 0.7
+  max_tokens: 512
+  context_window: 2048
+logging: true
