@@ -1,8 +1,6 @@
 package tickets
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +11,7 @@ import (
 	"keystone/internal/logger"
 )
 
-// Default ticket storage path, can be overridden with KEYSTONE_TICKET_DIR
+// Default ticket storage path
 var TicketDir = filepath.Join(os.Getenv("HOME"), ".keystone", "tickets")
 
 const (
@@ -21,7 +19,7 @@ const (
 	DefaultMaxHops = 5
 )
 
-// Ticket represents a unit of work tracked across agents
+// Ticket represents a unit of work tracked across agents.
 type Ticket struct {
 	ID        string                 `json:"id"`
 	UserID    string                 `json:"user_id"`
@@ -35,14 +33,17 @@ type Ticket struct {
 	mu        sync.Mutex
 }
 
-// NewTicket constructs a new ticket with optional context
+// OnHandoffHook is an optional function to receive handoff events.
+var OnHandoffHook func(t *Ticket, nextAgentID string)
+
+// NewTicket constructs a new Ticket with optional context.
 func NewTicket(id, userID string, ctx interface{}) *Ticket {
 	var contextMap map[string]interface{}
 	switch v := ctx.(type) {
 	case map[string]string:
 		contextMap = make(map[string]interface{}, len(v))
 		for k, val := range v {
-			contextMap[k] = val
+			contextMap[Namespaced("", k)] = val
 		}
 	case map[string]interface{}:
 		contextMap = v
@@ -64,38 +65,12 @@ func NewTicket(id, userID string, ctx interface{}) *Ticket {
 	}
 }
 
-// NewID generates a unique ticket ID
-func NewID(parts ...string) string {
-	return fmt.Sprintf("%s-%d", filepath.Join(parts...), time.Now().UnixNano())
-}
-
-// Validate returns an error if the ticket is expired or exceeded hops
-func (t *Ticket) Validate() error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if time.Now().After(t.ExpiresAt) {
-		return errors.New("ticket expired")
-	}
-	if t.Hops >= t.MaxHops {
-		return fmt.Errorf("ticket exceeded max hops (%d)", t.MaxHops)
-	}
-	return nil
-}
-
-// IsExpired returns true if the ticket has expired
-func (t *Ticket) IsExpired() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return time.Now().After(t.ExpiresAt)
-}
-
-// Namespaced context helpers
-
+// GetNamespaced retrieves a namespaced value for a specific agent.
 func (t *Ticket) GetNamespaced(agentID, key string) (string, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if val, ok := t.Context[agentID+"."+key]; ok {
+	ns := Namespaced(agentID, key)
+	if val, ok := t.Context[ns]; ok {
 		if s, ok := val.(string); ok {
 			return s, true
 		}
@@ -103,26 +78,44 @@ func (t *Ticket) GetNamespaced(agentID, key string) (string, bool) {
 	return "", false
 }
 
+// SetNamespaced sets a namespaced value for a specific agent (allows overwrite)
 func (t *Ticket) SetNamespaced(agentID, key, value string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.Context[agentID+"."+key] = value
+	_ = t.SetNamespacedWithOverwrite(agentID, key, value, true)
 }
 
+// SetNamespacedWithOverwrite sets a namespaced value for a specific agent.
+func (t *Ticket) SetNamespacedWithOverwrite(agentID, key, value string, allowOverwrite bool) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	ns := Namespaced(agentID, key)
+
+	if !allowOverwrite {
+		if _, exists := t.Context[ns]; exists {
+			return fmt.Errorf("namespaced key %q already exists for agent %q", key, agentID)
+		}
+	}
+
+	t.Context[ns] = value
+	return nil
+}
+
+// GetAllNamespaced returns all key-value pairs for a specific agent.
 func (t *Ticket) GetAllNamespaced(agentID string) map[string]string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	out := make(map[string]string)
-	prefix := agentID + "."
+	prefix := "agent." + agentID + "."
 	for k, v := range t.Context {
 		if s, ok := v.(string); ok && strings.HasPrefix(k, prefix) {
-			out[k[len(prefix):]] = s
+			keyWithoutPrefix := strings.TrimPrefix(k, prefix)
+			out[keyWithoutPrefix] = s
 		}
 	}
 	return out
 }
 
-// IncrementStep increments step and hops
+// IncrementStep increments the ticket's step and hops, optionally logging.
 func (t *Ticket) IncrementStep(verbose bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -133,7 +126,37 @@ func (t *Ticket) IncrementStep(verbose bool) {
 	}
 }
 
-// Serialize returns a snapshot of the ticket fields
+// Handoff transfers the ticket to the next agent.
+func (t *Ticket) Handoff(agentID string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.ExpiresAt.Before(time.Now()) {
+		return fmt.Errorf("ticket expired")
+	}
+	if t.Hops >= t.MaxHops {
+		return fmt.Errorf("ticket max hops exceeded")
+	}
+
+	t.Step++
+	t.Hops++
+
+	if t.Context == nil {
+		t.Context = make(map[string]interface{})
+	}
+	key := Namespaced(agentID, "_")
+	if _, ok := t.Context[key]; !ok {
+		t.Context[key] = ""
+	}
+
+	if OnHandoffHook != nil {
+		OnHandoffHook(t, agentID)
+	}
+
+	return nil
+}
+
+// Serialize returns a snapshot of ticket fields.
 func (t *Ticket) Serialize() map[string]interface{} {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -149,7 +172,7 @@ func (t *Ticket) Serialize() map[string]interface{} {
 	}
 }
 
-// SerializeContext returns a copy of the context
+// SerializeContext returns a copy of the ticket's context.
 func (t *Ticket) SerializeContext() map[string]interface{} {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -160,150 +183,32 @@ func (t *Ticket) SerializeContext() map[string]interface{} {
 	return copyCtx
 }
 
-// Store handles file-based persistence of tickets
-type Store struct {
-	dir string
-	mu  sync.Mutex
+// IsExpired returns true if the ticket's ExpiresAt time is in the past.
+func (t *Ticket) IsExpired() bool {
+	t.mu.Lock()
+	expires := t.ExpiresAt
+	t.mu.Unlock()
+	return time.Now().After(expires)
 }
 
-func NewStore(dir string) *Store {
-	if dir == "" {
-		if envDir := os.Getenv("KEYSTONE_TICKET_DIR"); envDir != "" {
-			dir = envDir
-		} else {
-			dir = TicketDir
-		}
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		panic(fmt.Sprintf("failed to create ticket directory %s: %v", dir, err))
-	}
-	return &Store{dir: dir}
-}
+// Validate checks if the ticket is expired or has exceeded max hops.
+func (t *Ticket) Validate() error {
+	t.mu.Lock()
+	expires := t.ExpiresAt
+	hops := t.Hops
+	maxHops := t.MaxHops
+	t.mu.Unlock()
 
-func sanitizeID(id string) string {
-	return filepath.Base(strings.ReplaceAll(id, "/", "_"))
-}
-
-func (s *Store) ticketPath(userID, ticketID string) string {
-	return filepath.Join(s.dir, fmt.Sprintf("%s_%s.json", userID, sanitizeID(ticketID)))
-}
-
-// Save persists a ticket to disk
-func (s *Store) Save(t *Ticket) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	fullPath := s.ticketPath(t.UserID, t.ID)
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-		return err
+	if time.Now().After(expires) {
+		return fmt.Errorf("ticket expired")
 	}
-	data, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(fullPath, data, 0o644)
-}
-
-// Load retrieves a ticket by user and ID
-func (s *Store) Load(userID, ticketID string) (*Ticket, error) {
-	data, err := os.ReadFile(s.ticketPath(userID, ticketID))
-	if err != nil {
-		return nil, err
-	}
-	var t Ticket
-	if err := json.Unmarshal(data, &t); err != nil {
-		return nil, err
-	}
-	return &t, nil
-}
-
-// List returns all tickets for a user or "all"
-func (s *Store) List(userID string) ([]*Ticket, error) {
-	files, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var tickets []*Ticket
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-		path := filepath.Join(s.dir, f.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var t Ticket
-		if err := json.Unmarshal(data, &t); err != nil {
-			continue
-		}
-		if userID == "all" || t.UserID == userID {
-			tickets = append(tickets, &t)
-		}
-	}
-	return tickets, nil
-}
-
-// Delete removes a ticket
-func (s *Store) Delete(userID, ticketID string) error {
-	return os.Remove(s.ticketPath(userID, ticketID))
-}
-
-// Purge deletes all tickets for a user
-func (s *Store) Purge(userID string) error {
-	files, err := os.ReadDir(s.dir)
-	if err != nil {
-		return err
-	}
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-		path := filepath.Join(s.dir, f.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var t Ticket
-		if err := json.Unmarshal(data, &t); err != nil {
-			continue
-		}
-		if t.UserID == userID {
-			_ = os.Remove(path)
-		}
+	if hops >= maxHops {
+		return fmt.Errorf("ticket exceeded max hops (%d)", maxHops)
 	}
 	return nil
 }
 
-// Cleanup removes expired or over-hopped tickets for a user
-func (s *Store) Cleanup(userID string) (int, error) {
-	files, err := os.ReadDir(s.dir)
-	if err != nil {
-		return 0, err
-	}
-
-	removed := 0
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-		path := filepath.Join(s.dir, f.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var t Ticket
-		if err := json.Unmarshal(data, &t); err != nil {
-			continue
-		}
-		if t.UserID != userID {
-			continue
-		}
-		if t.IsExpired() || t.Hops >= t.MaxHops {
-			_ = os.Remove(path)
-			removed++
-		}
-	}
-	return removed, nil
+// NewID generates a unique ticket ID using optional string parts and the current timestamp.
+func NewID(parts ...string) string {
+	return fmt.Sprintf("%s-%d", filepath.Join(parts...), time.Now().UnixNano())
 }
