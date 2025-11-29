@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// TestTicketHandoffBasic tests that Handoff increments Step and Hops
 func TestTicketHandoffBasic(t *testing.T) {
 	ticket := NewTicket("t1", "user1", nil)
 	initialStep := ticket.Step
@@ -23,13 +22,13 @@ func TestTicketHandoffBasic(t *testing.T) {
 		t.Errorf("expected Hops %d, got %d", initialHops+1, ticket.Hops)
 	}
 
-	// Check context initialized for agent
-	if _, ok := ticket.Context["agent1"]; !ok {
-		t.Error("expected agent1 context to be initialized")
+	// Check namespaced context initialized for agent
+	key := Namespaced("agent1", "_")
+	if _, ok := ticket.Context[key]; !ok {
+		t.Errorf("expected %q context to be initialized", key)
 	}
 }
 
-// TestTicketHandoffMaxHops ensures handoff fails when MaxHops exceeded
 func TestTicketHandoffMaxHops(t *testing.T) {
 	ticket := NewTicket("t2", "user1", nil)
 	ticket.Hops = ticket.MaxHops
@@ -40,7 +39,6 @@ func TestTicketHandoffMaxHops(t *testing.T) {
 	}
 }
 
-// TestTicketHandoffExpired ensures handoff fails for expired tickets
 func TestTicketHandoffExpired(t *testing.T) {
 	ticket := NewTicket("t3", "user1", nil)
 	ticket.ExpiresAt = time.Now().Add(-time.Minute)
@@ -51,7 +49,6 @@ func TestTicketHandoffExpired(t *testing.T) {
 	}
 }
 
-// TestTicketHandoffHook tests OnHandoffHook is called
 func TestTicketHandoffHook(t *testing.T) {
 	ticket := NewTicket("t4", "user1", nil)
 
@@ -73,5 +70,11 @@ func TestTicketHandoffHook(t *testing.T) {
 	}
 	if !called {
 		t.Error("expected OnHandoffHook to be called")
+	}
+
+	// Check namespaced context initialized for agent
+	key := Namespaced("agentX", "_")
+	if _, ok := ticket.Context[key]; !ok {
+		t.Errorf("expected %q context to be initialized", key)
 	}
 }
